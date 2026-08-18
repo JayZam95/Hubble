@@ -445,7 +445,7 @@ class _AvailableCabsScreenState extends ConsumerState<AvailableCabsScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _cabs.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 14),
+                separatorBuilder: (_, __) => const SizedBox(height: 14),
                 itemBuilder: (context, index) {
                   final cab = _cabs[index];
                   final isSelected = _selectedCab?.id == cab.id;

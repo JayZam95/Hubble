@@ -680,7 +680,7 @@ class _FoodCategoryScreenState extends ConsumerState<FoodCategoryScreen> {
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: filteredFoods.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 16),
+                            separatorBuilder: (_, __) => const SizedBox(height: 16),
                             itemBuilder: (context, index) {
                               final food = filteredFoods[index];
                               return _buildFoodCard(context, food, isDark, cardColor, amberTheme);

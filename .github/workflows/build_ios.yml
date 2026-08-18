@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build iOS Application (IPA)
 
 on:
   push:
@@ -22,32 +22,42 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Set up Flutter
+      - name: Set up Flutter SDK
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      - name: Get Dependencies
+      - name: Set up CocoaPods
+        uses: maxim-lobanov/setup-cocoapods@v1
+        with:
+          podfile-path: ios/Podfile
+
+      - name: Install Flutter Dependencies
         run: flutter pub get
 
-      - name: Run Tests
+      - name: Install CocoaPods Dependencies
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Run Test Suite
         run: flutter test
 
-      - name: Build iOS Framework & Runner (No Code Sign)
+      - name: Build iOS App (Release Mode, No Code Sign)
         run: flutter build ios --release --no-codesign
 
       - name: Package Payload into Installable IPA
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r Hubble-iOS.ipa Payload
+          zip -r Hubble-iOS-Release.ipa Payload
           mkdir -p output
-          mv Hubble-iOS.ipa output/
+          mv Hubble-iOS-Release.ipa output/
 
       - name: Upload iOS IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Hubble-iOS-IPA
-          path: output/Hubble-iOS.ipa
+          name: Hubble-iOS-Release-IPA
+          path: output/Hubble-iOS-Release.ipa
           retention-days: 14

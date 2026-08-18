@@ -66,10 +66,10 @@ class ChatRepository {
       'type': type,
       'status': 1, // Sent
       'timestamp': FieldValue.serverTimestamp(),
-      'mediaUrl': ?mediaUrl,
-      'metadata': ?metadata,
-      'replyToName': ?replyToName,
-      'replyToContent': ?replyToContent,
+      if (mediaUrl != null) 'mediaUrl': mediaUrl,
+      if (metadata != null) 'metadata': metadata,
+      if (replyToName != null) 'replyToName': replyToName,
+      if (replyToContent != null) 'replyToContent': replyToContent,
       'isEdited': false,
     });
 

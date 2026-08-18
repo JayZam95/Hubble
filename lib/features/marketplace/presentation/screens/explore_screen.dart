@@ -591,7 +591,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               scrollDirection: Axis.horizontal,
               itemCount: fallbackProviders.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 16),
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 final provider = fallbackProviders[index];
                 return SizedBox(
@@ -668,8 +668,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               itemCount: 2,
-              separatorBuilder: (_, _) => const SizedBox(width: 16),
-              itemBuilder: (_, _) => const ShimmerCard(width: 260, height: 180, borderRadius: 20),
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
+              itemBuilder: (_, __) => const ShimmerCard(width: 260, height: 180, borderRadius: 20),
             ),
           ),
           error: (err, st) => const SizedBox.shrink(),

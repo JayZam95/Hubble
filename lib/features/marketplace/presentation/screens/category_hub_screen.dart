@@ -404,7 +404,7 @@ class _CategoryHubScreenState extends ConsumerState<CategoryHubScreen> {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: filtered.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 14),
+                      separatorBuilder: (_, __) => const SizedBox(height: 14),
                       itemBuilder: (context, index) {
                         final listing = filtered[index];
                         final hasImg = listing.images.isNotEmpty && listing.images.first.isNotEmpty;

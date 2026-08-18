@@ -563,7 +563,7 @@ class _RealEstateCategoryScreenState extends ConsumerState<RealEstateCategoryScr
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: filteredProps.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 18),
+                            separatorBuilder: (_, __) => const SizedBox(height: 18),
                             itemBuilder: (context, index) {
                               final prop = filteredProps[index];
                               return _buildPropertyCard(context, prop, isDark, cardColor, emeraldTheme);

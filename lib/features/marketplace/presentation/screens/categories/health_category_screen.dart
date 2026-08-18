@@ -477,7 +477,7 @@ class _HealthCategoryScreenState extends ConsumerState<HealthCategoryScreen> {
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: filteredDocs.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 16),
+                            separatorBuilder: (_, __) => const SizedBox(height: 16),
                             itemBuilder: (context, index) {
                               final doc = filteredDocs[index];
                               return _buildDoctorCard(context, doc, isDark, cardColor, tealTheme);

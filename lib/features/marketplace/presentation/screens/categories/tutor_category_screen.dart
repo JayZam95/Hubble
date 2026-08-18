@@ -732,7 +732,7 @@ class _TutorCategoryScreenState extends ConsumerState<TutorCategoryScreen> {
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: filteredMockTutors.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 16),
+                            separatorBuilder: (_, __) => const SizedBox(height: 16),
                             itemBuilder: (context, index) {
                               final tutor = filteredMockTutors[index];
                               return _buildTutorCard(context, tutor, isDark, cardColor, primaryPurple);

@@ -584,7 +584,7 @@ class _BikeServiceScreenState extends ConsumerState<BikeServiceScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _availableRiders.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final rider = _availableRiders[index];
                   final isSelected = _selectedRider?.id == rider.id;

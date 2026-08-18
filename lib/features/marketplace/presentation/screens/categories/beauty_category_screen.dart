@@ -517,7 +517,7 @@ class _BeautyCategoryScreenState extends ConsumerState<BeautyCategoryScreen> {
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: filteredServices.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 16),
+                            separatorBuilder: (_, __) => const SizedBox(height: 16),
                             itemBuilder: (context, index) {
                               final service = filteredServices[index];
                               return _buildBeautyCard(context, service, isDark, cardColor, pinkTheme);

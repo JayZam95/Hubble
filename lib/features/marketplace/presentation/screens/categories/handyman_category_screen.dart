@@ -753,7 +753,7 @@ class _HandymanCategoryScreenState extends ConsumerState<HandymanCategoryScreen>
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: filteredTrades.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 16),
+                            separatorBuilder: (_, __) => const SizedBox(height: 16),
                             itemBuilder: (context, index) {
                               final trade = filteredTrades[index];
                               return _buildTradeCard(context, trade, isDark, cardColor, orangeTheme);

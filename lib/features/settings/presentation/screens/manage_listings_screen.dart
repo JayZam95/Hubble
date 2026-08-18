@@ -571,7 +571,7 @@ class _ManageListingsScreenState extends ConsumerState<ManageListingsScreen> {
                       return ListView.separated(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
                         itemCount: filtered.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final listing = filtered[index];
                           final isProduct = listing.listingType == ListingType.product;

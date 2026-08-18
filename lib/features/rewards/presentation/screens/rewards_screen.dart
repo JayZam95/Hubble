@@ -533,7 +533,7 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with SingleTicker
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: state.transactions.length,
-      separatorBuilder: (_, _) => Divider(color: isDark ? Colors.white10 : Colors.black12),
+      separatorBuilder: (_, __) => Divider(color: isDark ? Colors.white10 : Colors.black12),
       itemBuilder: (context, index) {
         final tx = state.transactions[index];
         final dateStr = DateFormat('MMM dd, yyyy • hh:mm a').format(tx.date);
