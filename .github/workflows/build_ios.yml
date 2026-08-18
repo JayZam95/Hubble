@@ -1,0 +1,54 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build iOS Application (Unsigned IPA)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java / JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Run Tests
+        run: flutter test
+
+      - name: Build iOS Framework & Runner (No Code Sign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package Payload into Installable IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r Hubble-iOS.ipa Payload
+          mkdir -p output
+          mv Hubble-iOS.ipa output/
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hubble-iOS-IPA
+          path: output/Hubble-iOS.ipa
+          retention-days: 14

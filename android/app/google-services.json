@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "838703491118",
+    "firebase_url": "https://hubble-intentgenesiscorp-default-rtdb.firebaseio.com",
+    "project_id": "hubble-intentgenesiscorp",
+    "storage_bucket": "hubble-intentgenesiscorp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:838703491118:android:30c11eb2c754d7e83817bf",
+        "android_client_info": {
+          "package_name": "com.example.hubble"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "838703491118-07eu0fq45avpd4t7sjkfepg32d971u0u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.hubble",
+            "certificate_hash": "02cdf8160bebfeef138631810d9d168046a7017f"
+          }
+        },
+        {
+          "client_id": "838703491118-hf5u6asj7m7af365dr3f5reckhms3g64.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5UZUX84N7KoYlkaIckyJGAPjiQfVwxQQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "838703491118-hf5u6asj7m7af365dr3f5reckhms3g64.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "838703491118-dmgd91917g06kc8m4q8jcrcdici9ehev.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.hubble"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
