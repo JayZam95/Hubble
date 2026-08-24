@@ -68,5 +68,13 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>NSCameraUsageDescription</key>
+		<string>Hubble requires camera access to allow providers and clients to upload listing photos and KYC verification documents.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Hubble requires photo library access to allow uploading marketplace listing images and profile avatars.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Hubble requires location access to find nearby services, calculate boda/cab distances, and enable live tracking.</string>
+		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+		<string>Hubble requires location access to update rider position during active cab and boda trips.</string>
 	</dict>
 </plist>

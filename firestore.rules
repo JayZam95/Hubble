@@ -31,7 +31,8 @@ service cloud.firestore {
       // User subcollections
       match /transactions/{txId} {
         allow read: if isOwner(userId) || isAdmin();
-        allow write: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) || isAdmin();
+        allow update, delete: if isAdmin();
       }
 
       match /notifications/{notifId} {
