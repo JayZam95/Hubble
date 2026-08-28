@@ -332,7 +332,6 @@ class AuthRepository implements BaseAuthRepository {
         final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
         final AuthCredential credential = GoogleAuthProvider.credential(
           idToken: googleAuth.idToken,
-          accessToken: googleAuth.accessToken,
         );
 
         final UserCredential userCredential = await _firebaseAuth.signInWithCredential(credential);
