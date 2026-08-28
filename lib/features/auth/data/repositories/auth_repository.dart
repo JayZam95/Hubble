@@ -108,11 +108,19 @@ class AuthRepository implements BaseAuthRepository {
     try {
       final doc = await _firestore.collection('users').doc(uid).get();
       if (doc.exists && doc.data() != null) {
-        return UserModel.fromMap(doc.data()!);
+        try {
+          return UserModel.fromMap(doc.data()!);
+        } catch (e) {
+          debugPrint('Error parsing user model: $e');
+        }
       }
     } catch (e) {
       debugPrint('Error fetching user model: $e');
-      return null;
+    }
+
+    final currentUser = _firebaseAuth.currentUser;
+    if (currentUser != null && currentUser.uid == uid) {
+      return await _createAndPersistUserDoc(currentUser);
     }
     return null;
   }
