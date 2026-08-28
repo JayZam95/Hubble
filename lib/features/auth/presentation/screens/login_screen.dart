@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/presentation/screens/main_layout.dart';
 import '../providers/auth_provider.dart';
+import 'google_setup_screen.dart';
 import 'role_selection_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -55,10 +57,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     // Listen to changes in authState (errors, password resets, and successful login)
     ref.listen<AuthState>(authStateProvider, (previous, next) {
-      if (next.isAuthenticated || next.isPartialAuth) {
-        if (Navigator.canPop(context)) {
-          Navigator.of(context).popUntil((route) => route.isFirst);
-        }
+      if (next.isAuthenticated) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const MainLayout()),
+          (route) => false,
+        );
+      } else if (next.isPartialAuth) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const GoogleSetupScreen()),
+          (route) => false,
+        );
       }
       if (next.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(

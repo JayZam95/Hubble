@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/presentation/screens/main_layout.dart';
 import '../../domain/models/user_model.dart';
 import '../providers/auth_provider.dart';
 
@@ -56,8 +57,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     // Listen to errors and successful authentication
     ref.listen<AuthState>(authStateProvider, (previous, next) {
-      if (next.isAuthenticated && previous?.isAuthenticated != true) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+      if (next.isAuthenticated) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const MainLayout()),
+          (route) => false,
+        );
       }
       if (next.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
