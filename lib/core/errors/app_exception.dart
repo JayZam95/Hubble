@@ -62,6 +62,13 @@ class AppException implements Exception {
     }
 
     final rawStr = error?.toString() ?? '';
+    if (rawStr.contains('GoogleSignInExceptionCode.canceled') || rawStr.contains('canceled')) {
+      return AppException('Google Sign-In was canceled.', code: 'canceled', originalError: error);
+    }
+    if (rawStr.contains('Account reauth failed') || rawStr.contains('[16]')) {
+      return AppException('Google Sign-In was canceled or re-authentication failed.', code: 'canceled', originalError: error);
+    }
+
     final cleaned = rawStr.replaceAll(RegExp(r'^(Exception|StateError):\s*'), '');
     return AppException(cleaned.isNotEmpty ? cleaned : 'An unexpected error occurred.', originalError: error);
   }

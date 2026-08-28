@@ -7,6 +7,7 @@ import '../../data/repositories/auth_repository.dart';
 import '../../domain/models/user_model.dart';
 import '../../domain/repositories/base_auth_repository.dart';
 import '../../../../core/services/push_notification_service.dart';
+import '../../../../core/errors/app_exception.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 // 1. Auth State Class
@@ -151,6 +152,10 @@ class AuthNotifier extends Notifier<AuthState> {
       await repository.signInWithGoogle();
       state = state.copyWith(isLoading: false);
     } catch (e) {
+      if (e is AppException && e.code == 'canceled') {
+        state = state.copyWith(isLoading: false);
+        return;
+      }
       state = state.copyWith(
         isLoading: false,
         errorMessage: e.toString().replaceAll('Exception: ', ''),

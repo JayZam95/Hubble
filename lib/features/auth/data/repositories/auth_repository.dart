@@ -314,10 +314,19 @@ class AuthRepository implements BaseAuthRepository {
         try {
           googleUser = await _googleSignIn.authenticate();
         } on GoogleSignInException catch (e) {
-          if (e.description?.contains('No credentials available') == true || e.code == GoogleSignInExceptionCode.unknownError) {
-            throw AppException('No Google Account found on this device. Please add a Google Account in your device settings.');
+          if (e.code == GoogleSignInExceptionCode.canceled) {
+            throw AppException('Google Sign-In was canceled.', code: 'canceled', originalError: e);
           }
-          rethrow;
+          if (e.description?.contains('No credentials available') == true || e.code == GoogleSignInExceptionCode.unknownError) {
+            throw AppException('No Google Account found on this device. Please add a Google Account in your device settings.', code: 'no-account', originalError: e);
+          }
+          throw AppException('Google Sign-In was canceled or re-authentication failed.', code: 'canceled', originalError: e);
+        } catch (e) {
+          throw AppException.fromFirebaseException(e);
+        }
+
+        if (googleUser == null) {
+          throw AppException('Google Sign-In was canceled.', code: 'canceled');
         }
 
         final List<String> scopes = ['email', 'profile'];
