@@ -329,18 +329,24 @@ class AuthRepository implements BaseAuthRepository {
           throw AppException('Google Sign-In was canceled.', code: 'canceled');
         }
 
-        final List<String> scopes = ['email', 'profile'];
-        final clientAuth = await googleUser.authorizationClient.authorizeScopes(scopes);
-
-        final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
         final AuthCredential credential = GoogleAuthProvider.credential(
           idToken: googleAuth.idToken,
-          accessToken: clientAuth.accessToken,
+          accessToken: googleAuth.accessToken,
         );
 
         final UserCredential userCredential = await _firebaseAuth.signInWithCredential(credential);
         final User? user = userCredential.user;
         if (user == null) throw AppException('Google Sign-In failed.');
+
+        try {
+          final doc = await _firestore.collection('users').doc(user.uid).get();
+          if (!doc.exists) {
+            await _createAndPersistUserDoc(user);
+          }
+        } catch (e) {
+          debugPrint('Error verifying Google user doc: $e');
+        }
 
         return userCredential;
       }
