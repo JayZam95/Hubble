@@ -106,11 +106,11 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, clearError: true, clearPasswordReset: true);
     try {
       final repository = ref.read(authRepositoryProvider);
-      await repository.signInWithEmailAndPassword(
+      final userModel = await repository.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(user: userModel, isLoading: false);
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -129,14 +129,14 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, clearError: true, clearPasswordReset: true);
     try {
       final repository = ref.read(authRepositoryProvider);
-      await repository.signUpWithEmailAndPassword(
+      final userModel = await repository.signUpWithEmailAndPassword(
         email: email,
         password: password,
         displayName: displayName,
         role: role,
         phoneNumber: phoneNumber,
       );
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(user: userModel, isLoading: false);
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -149,8 +149,19 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, clearError: true, clearPasswordReset: true);
     try {
       final repository = ref.read(authRepositoryProvider);
-      await repository.signInWithGoogle();
-      state = state.copyWith(isLoading: false);
+      final userCredential = await repository.signInWithGoogle();
+      final firebaseUser = userCredential.user;
+      if (firebaseUser != null) {
+        final userModel = await repository.getCurrentUserData();
+        state = state.copyWith(
+          user: userModel,
+          firebaseUser: firebaseUser,
+          setFirebaseUser: true,
+          isLoading: false,
+        );
+      } else {
+        state = state.copyWith(isLoading: false);
+      }
     } catch (e) {
       if (e is AppException && e.code == 'canceled') {
         state = state.copyWith(isLoading: false);
