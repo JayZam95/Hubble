@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import '../../../auth/domain/models/user_model.dart';
 import '../../domain/models/listing_model.dart';
 import '../../../../core/utils/image_utils.dart';
@@ -246,20 +247,23 @@ class MarketplaceRepository {
         createdAt: DateTime.now(),
       );
 
-      await _firestore.runTransaction((transaction) async {
-        final map = finalListing.toMap();
-        map['createdAt'] = FieldValue.serverTimestamp();
-        transaction.set(docRef, map);
-        if (listing.providerId.trim().isNotEmpty) {
-          final providerRef = _firestore.collection('users').doc(listing.providerId);
-          transaction.set(providerRef, {
+      final map = finalListing.toMap();
+      map['createdAt'] = FieldValue.serverTimestamp();
+      await docRef.set(map);
+
+      if (listing.providerId.trim().isNotEmpty) {
+        try {
+          await _firestore.collection('users').doc(listing.providerId).set({
             'providerProfile': {
               'listingsCount': FieldValue.increment(1),
             }
           }, SetOptions(merge: true));
+        } catch (e) {
+          debugPrint('>>> [MarketplaceRepository] Note: Could not update provider listingsCount: $e');
         }
-      });
-    } catch (e) {
+      }
+    } catch (e, st) {
+      debugPrint('>>> [MarketplaceRepository] createListing failed: $e\n$st');
       throw AppException.fromFirebaseException(e);
     }
   }

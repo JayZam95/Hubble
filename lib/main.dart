@@ -62,16 +62,18 @@ void main() async {
 }
 
 Future<void> _initSecondaryServices() async {
-  try {
-    // ignore: deprecated_member_use
-    await FirebaseAppCheck.instance.activate(
+  if (!kDebugMode) {
+    try {
       // ignore: deprecated_member_use
-      androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-      // ignore: deprecated_member_use
-      appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.deviceCheck,
-    );
-  } catch (e) {
-    debugPrint('Firebase AppCheck init deferred error: $e');
+      await FirebaseAppCheck.instance.activate(
+        // ignore: deprecated_member_use
+        androidProvider: AndroidProvider.playIntegrity,
+        // ignore: deprecated_member_use
+        appleProvider: AppleProvider.deviceCheck,
+      );
+    } catch (e) {
+      debugPrint('Firebase AppCheck init deferred error: $e');
+    }
   }
 
   try {

@@ -15,11 +15,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "838703491118-07eu0fq45avpd4t7sjkfepg32d971u0u.apps.googleusercontent.com",
+          "client_id": "838703491118-vnound16pvg0j9frf20m19nlgka03jtv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.hubble",
-            "certificate_hash": "02cdf8160bebfeef138631810d9d168046a7017f"
+            "certificate_hash": "f89d21862d6923a500697ebc3ee88d83f2594ac6"
           }
         },
         {

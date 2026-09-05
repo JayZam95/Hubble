@@ -15,6 +15,7 @@ import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/presentation/widgets/hubble_image.dart';
 import '../../../../chat/presentation/screens/chat_screen.dart';
+import 'package:hubble/features/marketplace/data/boda_routing_service.dart';
 
 /// Ride lifecycle states
 enum RideTrackingState {
@@ -30,7 +31,7 @@ extension RideTrackingStateExtension on RideTrackingState {
   String get displayName {
     switch (this) {
       case RideTrackingState.searching:
-        return 'Finding Nearby Driver';
+        return 'Finding Nearby Boda';
       case RideTrackingState.driverDispatched:
         return 'Driver On The Way';
       case RideTrackingState.arrivedAtPickup:
@@ -109,13 +110,13 @@ class LiveRideTrackingScreen extends ConsumerStatefulWidget {
   const LiveRideTrackingScreen({
     super.key,
     required this.rideId,
-    this.rideType = 'cab',
+    this.rideType = 'boda',
     required this.driverId,
     required this.driverName,
-    this.driverPhone = '+260977889900',
+    this.driverPhone = '+260 977 293122',
     this.driverPhotoUrl = '',
-    this.driverRating = 4.9,
-    this.totalRides = 350,
+    this.driverRating = 4.92,
+    this.totalRides = 480,
     required this.vehicleModel,
     required this.licensePlate,
     required this.pickupName,
@@ -142,14 +143,20 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
   late String _safetyPin;
   late LatLng _currentVehiclePosition;
   late LatLng _driverInitialPosition;
+  double _vehicleBearing = 0.0;
+  int _currentSpeedKmh = 38;
+
+  List<LatLng> _fullRoadPolyline = [];
+  List<BodaNavStep> _turnByTurnSteps = [];
+  int _currentStepIndex = 0;
 
   late AnimationController _animController;
   Timer? _stateSimulationTimer;
   Timer? _countdownTimer;
   StreamSubscription<DocumentSnapshot>? _rideSubscription;
 
-  int _etaMinutes = 5;
-  int _etaSecondsRemaining = 300;
+  int _etaMinutes = 4;
+  int _etaSecondsRemaining = 240;
   double _distanceRemainingKm = 0.0;
   bool _hasShownCompletionModal = false;
   final bool _isAutoSimulationEnabled = true;
@@ -162,25 +169,23 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
         ? widget.safetyPin
         : '${1000 + math.Random().nextInt(9000)}';
 
-    // Offset initial driver position slightly from pickup
     _driverInitialPosition = LatLng(
-      widget.pickupLatLng.latitude + 0.008,
-      widget.pickupLatLng.longitude - 0.008,
+      widget.pickupLatLng.latitude + 0.006,
+      widget.pickupLatLng.longitude - 0.006,
     );
     _currentVehiclePosition = _driverInitialPosition;
     _distanceRemainingKm = widget.distanceKm;
-    _etaMinutes = math.max(2, (widget.distanceKm * 2.5).round());
+    _etaMinutes = math.max(2, (widget.distanceKm * 2.2).round());
     _etaSecondsRemaining = _etaMinutes * 60;
 
     _animController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 12),
+      duration: const Duration(seconds: 14),
     )..addListener(() {
         _updateVehiclePositionAlongRoute();
       });
 
-    _animController.forward();
-
+    _loadRoadNetworkPolyline();
     _setupFirestoreListener();
     _startCountdownTimer();
     _startStateSimulation();
@@ -193,6 +198,27 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
     _countdownTimer?.cancel();
     _animController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadRoadNetworkPolyline() async {
+    // Fetch road polyline connecting driver -> pickup -> dropoff
+    final routePickup = await BodaRoutingService.fetchRoadRoute(_driverInitialPosition, widget.pickupLatLng);
+    final routeDropoff = await BodaRoutingService.fetchRoadRoute(widget.pickupLatLng, widget.dropoffLatLng);
+
+    if (mounted) {
+      setState(() {
+        _fullRoadPolyline = [
+          ...routePickup.polylinePoints,
+          ...routeDropoff.polylinePoints,
+        ];
+        _turnByTurnSteps = [
+          ...routePickup.steps,
+          ...routeDropoff.steps,
+        ];
+        _currentStepIndex = 0;
+      });
+      _animController.forward();
+    }
   }
 
   void _setupFirestoreListener() {
@@ -213,6 +239,12 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
             if (remoteStatus != _currentState) {
               setState(() {
                 _currentState = remoteStatus;
+                if (data.containsKey('driverLat') && data.containsKey('driverLng')) {
+                  _currentVehiclePosition = LatLng(
+                    (data['driverLat'] as num).toDouble(),
+                    (data['driverLng'] as num).toDouble(),
+                  );
+                }
                 if (_currentState == RideTrackingState.completed &&
                     !_hasShownCompletionModal) {
                   _hasShownCompletionModal = true;
@@ -241,8 +273,7 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
   void _startStateSimulation() {
     if (!_isAutoSimulationEnabled) return;
 
-    // Simulate state advancement:
-    // Dispatched (6s) -> Arrived (5s) -> In Transit (10s) -> Completed
+    // Dispatched (6s) -> Arrived (5s) -> In Transit (12s) -> Completed
     _stateSimulationTimer = Timer(const Duration(seconds: 6), () {
       if (!mounted || _currentState != RideTrackingState.driverDispatched) return;
       _advanceToState(RideTrackingState.arrivedAtPickup);
@@ -251,7 +282,7 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
         if (!mounted || _currentState != RideTrackingState.arrivedAtPickup) return;
         _advanceToState(RideTrackingState.inTransit);
 
-        _stateSimulationTimer = Timer(const Duration(seconds: 12), () {
+        _stateSimulationTimer = Timer(const Duration(seconds: 14), () {
           if (!mounted || _currentState != RideTrackingState.inTransit) return;
           _advanceToState(RideTrackingState.completed);
         });
@@ -265,14 +296,17 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
       _currentState = nextState;
       if (nextState == RideTrackingState.arrivedAtPickup) {
         _currentVehiclePosition = widget.pickupLatLng;
+        _currentSpeedKmh = 0;
         HapticFeedback.heavyImpact();
       } else if (nextState == RideTrackingState.inTransit) {
         _animController.reset();
         _animController.forward();
-        _etaSecondsRemaining = (widget.distanceKm * 120).round();
+        _currentSpeedKmh = 42;
+        _etaSecondsRemaining = (widget.distanceKm * 110).round();
       } else if (nextState == RideTrackingState.completed) {
         _currentVehiclePosition = widget.dropoffLatLng;
         _distanceRemainingKm = 0.0;
+        _currentSpeedKmh = 0;
         _etaMinutes = 0;
         _etaSecondsRemaining = 0;
         HapticFeedback.heavyImpact();
@@ -301,26 +335,33 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
   }
 
   void _updateVehiclePositionAlongRoute() {
+    if (_fullRoadPolyline.isEmpty) return;
     final progress = _animController.value;
+
     if (_currentState == RideTrackingState.driverDispatched) {
-      // Driver moving towards pickup
-      final lat = _driverInitialPosition.latitude +
-          (widget.pickupLatLng.latitude - _driverInitialPosition.latitude) * progress;
-      final lng = _driverInitialPosition.longitude +
-          (widget.pickupLatLng.longitude - _driverInitialPosition.longitude) * progress;
+      final pickupIndex = (_fullRoadPolyline.length ~/ 2);
+      final index = (pickupIndex * progress).clamp(0, pickupIndex - 1).toInt();
+      final p1 = _fullRoadPolyline[index];
+      final p2 = _fullRoadPolyline[math.min(index + 1, pickupIndex)];
+
       setState(() {
-        _currentVehiclePosition = LatLng(lat, lng);
+        _currentVehiclePosition = p1;
+        _vehicleBearing = BodaRoutingService.calculateBearing(p1, p2);
       });
     } else if (_currentState == RideTrackingState.inTransit) {
-      // In transit to dropoff
-      final lat = widget.pickupLatLng.latitude +
-          (widget.dropoffLatLng.latitude - widget.pickupLatLng.latitude) * progress;
-      final lng = widget.pickupLatLng.longitude +
-          (widget.dropoffLatLng.longitude - widget.pickupLatLng.longitude) * progress;
+      final pickupIndex = (_fullRoadPolyline.length ~/ 2);
+      final remainingCount = _fullRoadPolyline.length - pickupIndex;
+      final index = pickupIndex + (remainingCount * progress).clamp(0, remainingCount - 1).toInt();
+      final p1 = _fullRoadPolyline[index];
+      final p2 = _fullRoadPolyline[math.min(index + 1, _fullRoadPolyline.length - 1)];
+
       setState(() {
-        _currentVehiclePosition = LatLng(lat, lng);
-        _distanceRemainingKm =
-            math.max(0.0, widget.distanceKm * (1.0 - progress));
+        _currentVehiclePosition = p1;
+        _vehicleBearing = BodaRoutingService.calculateBearing(p1, p2);
+        _distanceRemainingKm = math.max(0.0, widget.distanceKm * (1.0 - progress));
+        if (_turnByTurnSteps.isNotEmpty && _turnByTurnSteps.length > 2) {
+          _currentStepIndex = (_turnByTurnSteps.length * progress).clamp(0, _turnByTurnSteps.length - 1).toInt();
+        }
       });
     }
   }
@@ -333,7 +374,7 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
       } else {
         _showSnack('Unable to place phone call to ${widget.driverPhone}');
       }
-    } catch (e) {
+    } catch (_) {
       _showSnack('Calling ${widget.driverPhone}');
     }
   }
@@ -353,10 +394,10 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
 
   void _shareTripStatus() {
     final shareText =
-        'Tracking my Hubble ride with ${widget.driverName} (${widget.licensePlate}). '
-        'Heading to ${widget.dropoffName}. ETA: $_etaMinutes mins. PIN: $_safetyPin.';
+        'Tracking my Hubble Boda ride with ${widget.driverName} (${widget.licensePlate}). '
+        'Heading to ${widget.dropoffName}. ETA: $_etaMinutes mins. Safety PIN: $_safetyPin.';
     // ignore: deprecated_member_use
-    Share.share(shareText, subject: 'My Hubble Ride Tracking');
+    Share.share(shareText, subject: 'My Hubble Boda Live Tracking');
   }
 
   void _showSosConfirmationDialog() {
@@ -364,29 +405,14 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
+        title: const Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFEE2E2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.warning_amber_rounded,
-                color: AppColors.error,
-                size: 28,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
+            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 28),
+            SizedBox(width: 12),
+            Expanded(
               child: Text(
-                'Emergency SOS',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 20,
-                  color: AppColors.error,
-                ),
+                'Emergency SOS (991)',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.error),
               ),
             ),
           ],
@@ -396,17 +422,17 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Do you need immediate emergency or police assistance?',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              'Do you need immediate police or medical assistance?',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Your live GPS coordinates (${_currentVehiclePosition.latitude.toStringAsFixed(4)}, ${_currentVehiclePosition.longitude.toStringAsFixed(4)}) and ride details with ${widget.driverName} will be shared with Zambia emergency services.',
-              style: const TextStyle(fontSize: 13, color: Colors.grey),
+              'Your live GPS coordinates (${_currentVehiclePosition.latitude.toStringAsFixed(4)}, ${_currentVehiclePosition.longitude.toStringAsFixed(4)}) and ride details with ${widget.driverName} will be shared with Zambia emergency dispatch.',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: const Color(0xFFFEF2F2),
                 borderRadius: BorderRadius.circular(12),
@@ -414,17 +440,11 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.shield_rounded, color: AppColors.error, size: 20),
+                  Icon(Icons.shield_rounded, color: AppColors.error, size: 18),
                   SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Zambia Police Toll-Free: 991',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.error,
-                        fontSize: 13,
-                      ),
-                    ),
+                  Text(
+                    'Zambia Police Toll-Free: 991',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error, fontSize: 13),
                   ),
                 ],
               ),
@@ -445,7 +465,7 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                   await launchUrl(policeUri);
                 }
               } catch (_) {}
-              _showSnack('Emergency alert triggered. Dispatching assistance.');
+              _showSnack('Emergency alert sent to emergency services.');
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
@@ -463,7 +483,6 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
   void _showTripCompletionModal() {
     double tipAmount = 0.0;
     double selectedRating = 5.0;
-    final noteController = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -489,11 +508,7 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                 color: sheetBg,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
                 boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 20,
-                    offset: Offset(0, -4),
-                  ),
+                  BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, -4)),
                 ],
               ),
               child: SingleChildScrollView(
@@ -510,24 +525,16 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                     ),
                     const SizedBox(height: 18),
 
-                    // Success checkmark badge
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: AppColors.success.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.check_circle_rounded,
-                        color: AppColors.success,
-                        size: 48,
-                      ),
+                      child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 48),
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'You Have Arrived!',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                    ),
+                    const Text('You Have Arrived!', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 4),
                     Text(
                       'Thank you for riding with ${widget.driverName}',
@@ -535,31 +542,21 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                     ),
                     const SizedBox(height: 20),
 
-                    // Fare breakdown card
+                    // Fare Breakdown
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: isDark ? Colors.white.withValues(alpha: 0.05) : const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isDark ? Colors.white12 : Colors.grey.shade200,
-                        ),
+                        border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade200),
                       ),
                       child: Column(
                         children: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Trip Distance', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                              Text('${widget.distanceKm.toStringAsFixed(1)} km', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Base Fare', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                              Text('K ${widget.fare.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const Text('Trip Fare', style: TextStyle(color: Colors.grey)),
+                              Text('K ${widget.fare.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                             ],
                           ),
                           if (tipAmount > 0) ...[
@@ -567,83 +564,48 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                const Text('Driver Tip', style: TextStyle(color: AppColors.primary, fontSize: 13)),
-                                Text('+ K ${tipAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 13)),
+                                const Text('Rider Tip', style: TextStyle(color: Colors.grey)),
+                                Text('+ K ${tipAmount.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.success)),
                               ],
                             ),
                           ],
-                          const Divider(height: 20),
+                          const Divider(height: 16),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'Total Paid',
-                                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                              ),
-                              Text(
-                                'K ${grandTotal.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.primary,
-                                ),
-                              ),
+                              const Text('Total Paid', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              Text('K ${grandTotal.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF059669))),
                             ],
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
 
-                    // Driver tipping options
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Add a Tip for ${widget.driverName}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
+                    // Tip Selection Pills
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [0.0, 10.0, 20.0, 50.0].map((tip) {
-                        final isSelected = tipAmount == tip;
-                        return Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: ChoiceChip(
-                              label: Center(
-                                child: Text(
-                                  tip == 0.0 ? 'No Tip' : 'K${tip.toInt()}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                    color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-                                  ),
-                                ),
-                              ),
-                              selected: isSelected,
-                              selectedColor: AppColors.primary,
-                              backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
-                              onSelected: (_) {
-                                setModalState(() => tipAmount = tip);
-                              },
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [0.0, 5.0, 10.0, 20.0].map((t) {
+                        final isSelected = tipAmount == t;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: ChoiceChip(
+                            label: Text(t == 0 ? 'No Tip' : '+ K ${t.toStringAsFixed(0)}'),
+                            selected: isSelected,
+                            selectedColor: const Color(0xFF0D9488),
+                            labelStyle: TextStyle(
+                              color: isSelected ? Colors.white : Colors.black87,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
                             ),
+                            onSelected: (val) => setModalState(() => tipAmount = val ? t : 0.0),
                           ),
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
 
-                    // Rating bar
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Rate your experience',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
+                    // Rating Bar
                     RatingBar.builder(
                       initialRating: selectedRating,
                       minRating: 1,
@@ -651,74 +613,24 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                       allowHalfRating: true,
                       itemCount: 5,
                       itemPadding: const EdgeInsets.symmetric(horizontal: 4.0),
-                      itemBuilder: (context, _) => const Icon(
-                        Icons.star_rounded,
-                        color: Colors.amber,
-                      ),
-                      onRatingUpdate: (rating) {
-                        setModalState(() => selectedRating = rating);
+                      itemBuilder: (context, _) => const Icon(Icons.star_rounded, color: Colors.amber),
+                      onRatingUpdate: (rating) => setModalState(() => selectedRating = rating),
+                    ),
+                    const SizedBox(height: 20),
+
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(modalContext); // Close modal
+                        Navigator.pop(context); // Return from live tracking
                       },
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Optional note field
-                    TextField(
-                      controller: noteController,
-                      decoration: InputDecoration(
-                        hintText: 'Leave a note for ${widget.driverName} (optional)...',
-                        hintStyle: const TextStyle(fontSize: 13),
-                        filled: true,
-                        fillColor: isDark ? Colors.white10 : Colors.grey.shade100,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0D9488),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        minimumSize: const Size.fromHeight(48),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Submit & Return button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          HapticFeedback.lightImpact();
-                          final isTest = (!kIsWeb && Platform.environment.containsKey('FLUTTER_TEST'));
-                          if (!isTest && widget.rideId.isNotEmpty) {
-                            try {
-                              await FirebaseFirestore.instance
-                                  .collection('ride_requests')
-                                  .doc(widget.rideId)
-                                  .update({
-                                'rating': selectedRating,
-                                'tip': tipAmount,
-                                'reviewNote': noteController.text.trim(),
-                                'status': 'COMPLETED',
-                                'completedAt': FieldValue.serverTimestamp(),
-                              });
-                            } catch (_) {}
-                          }
-
-                          if (modalContext.mounted) {
-                            Navigator.pop(modalContext);
-                          }
-                          if (mounted) {
-                            Navigator.pop(context);
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: 2,
-                        ),
-                        child: const Text(
-                          'Submit & Back to Hub',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+                      child: const Text('Complete & Submit Rating', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -731,7 +643,6 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
   }
 
   void _showSnack(String msg) {
-    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
     );
@@ -744,14 +655,15 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
     final isBike = widget.rideType == 'boda' || widget.rideType == 'parcel';
 
     return Scaffold(
+      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF8FAFC),
       body: Stack(
         children: [
-          // ── 1. Full Screen FlutterMap ──────────────────────────────────────
+          // ── 1. Live Map with OSRM Road Polyline & Bearing-Rotated Marker ───
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: widget.pickupLatLng,
-              initialZoom: 14.0,
+              initialZoom: 14.2,
               minZoom: 10.0,
               maxZoom: 18.0,
             ),
@@ -760,21 +672,16 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.intentgenesiscorp.hubble',
               ),
-              // Route Polyline
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: [
-                      _driverInitialPosition,
-                      widget.pickupLatLng,
-                      widget.dropoffLatLng,
-                    ],
-                    strokeWidth: 5.0,
-                    color: isBike ? const Color(0xFF0D9488) : AppColors.primary,
-                  ),
-                ],
-              ),
-              // Marker Layer
+              if (_fullRoadPolyline.isNotEmpty)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _fullRoadPolyline,
+                      strokeWidth: 5.5,
+                      color: isBike ? const Color(0xFF0D9488) : AppColors.primary,
+                    ),
+                  ],
+                ),
               MarkerLayer(
                 markers: [
                   // Pickup Marker
@@ -782,20 +689,13 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                     point: widget.pickupLatLng,
                     width: 50,
                     height: 50,
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: AppColors.success,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2)),
-                            ],
-                          ),
-                          child: const Icon(Icons.person_pin_circle_rounded, color: Colors.white, size: 22),
-                        ),
-                      ],
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: AppColors.success,
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+                      ),
+                      child: const Icon(Icons.person_pin_circle_rounded, color: Colors.white, size: 24),
                     ),
                   ),
 
@@ -804,67 +704,57 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                     point: widget.dropoffLatLng,
                     width: 50,
                     height: 50,
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: Colors.redAccent,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2)),
-                            ],
-                          ),
-                          child: const Icon(Icons.location_on_rounded, color: Colors.white, size: 22),
-                        ),
-                      ],
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.redAccent,
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2))],
+                      ),
+                      child: const Icon(Icons.location_on_rounded, color: Colors.white, size: 24),
                     ),
                   ),
 
-                  // Animated Vehicle Marker
+                  // Rotated Vehicle Marker along true road bearing
                   Marker(
                     point: _currentVehiclePosition,
-                    width: 64,
-                    height: 64,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Pulse glow ring
-                        Container(
-                          width: 54,
-                          height: 54,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: (isBike ? const Color(0xFF0D9488) : AppColors.primary).withValues(alpha: 0.25),
-                          ),
-                        ),
-                        // Vehicle badge
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isBike ? const Color(0xFF14B8A6) : Colors.amber,
-                              width: 2.5,
+                    width: 60,
+                    height: 60,
+                    child: Transform.rotate(
+                      angle: (_vehicleBearing * (math.pi / 180.0)),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: (isBike ? const Color(0xFF0D9488) : AppColors.primary).withValues(alpha: 0.25),
                             ),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black45,
-                                blurRadius: 8,
-                                offset: Offset(0, 4),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isBike ? const Color(0xFF14B8A6) : Colors.amber,
+                                width: 2.5,
                               ),
-                            ],
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 3)),
+                              ],
+                            ),
+                            child: Icon(
+                              isBike
+                                  ? (widget.rideType == 'parcel' ? Icons.inventory_2_rounded : Icons.two_wheeler_rounded)
+                                  : Icons.local_taxi_rounded,
+                              color: isBike ? const Color(0xFF14B8A6) : Colors.amber,
+                              size: 22,
+                            ),
                           ),
-                          child: Icon(
-                            isBike
-                                ? (widget.rideType == 'parcel' ? Icons.inventory_2_rounded : Icons.two_wheeler_rounded)
-                                : Icons.local_taxi_rounded,
-                            color: isBike ? const Color(0xFF14B8A6) : Colors.amber,
-                            size: 22,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -872,14 +762,68 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
             ],
           ),
 
-          // ── 2. Top Bar Navigation & SOS ────────────────────────────────────
+          // ── 2. Top Turn-by-Turn Maneuver Navigation Banner ─────────────────
+          if (_currentState == RideTrackingState.inTransit && _turnByTurnSteps.isNotEmpty)
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black38, blurRadius: 12, offset: Offset(0, 4)),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          _turnByTurnSteps[_currentStepIndex].iconType == 'turn-right'
+                              ? Icons.turn_right_rounded
+                              : (_turnByTurnSteps[_currentStepIndex].iconType == 'turn-left'
+                                  ? Icons.turn_left_rounded
+                                  : Icons.straight_rounded),
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _turnByTurnSteps[_currentStepIndex].instruction,
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            Text(
+                              'Speed: $_currentSpeedKmh km/h',
+                              style: const TextStyle(color: Colors.white60, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // ── 3. Top Status Header & SOS Button ──────────────────────────────
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Back Button
                   InkWell(
                     onTap: () => Navigator.pop(context),
                     borderRadius: BorderRadius.circular(24),
@@ -888,26 +832,19 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                       decoration: BoxDecoration(
                         color: cardBg,
                         shape: BoxShape.circle,
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
-                        ],
+                        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
                       ),
                       child: const Icon(Icons.arrow_back_rounded, size: 22),
                     ),
                   ),
-
-                  // Active status pill
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
                       color: cardBg,
                       borderRadius: BorderRadius.circular(20),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
-                      ],
+                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
                           width: 8,
@@ -915,7 +852,9 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                           decoration: BoxDecoration(
                             color: _currentState == RideTrackingState.arrivedAtPickup
                                 ? Colors.amber
-                                : (_currentState == RideTrackingState.inTransit ? AppColors.primary : AppColors.success),
+                                : (_currentState == RideTrackingState.inTransit
+                                    ? AppColors.primary
+                                    : AppColors.success),
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -927,37 +866,27 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                       ],
                     ),
                   ),
-
-                  // Emergency SOS Button
                   InkWell(
                     onTap: _showSosConfirmationDialog,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(20),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: AppColors.error,
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
                             color: AppColors.error.withValues(alpha: 0.4),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
                           ),
                         ],
                       ),
                       child: const Row(
                         children: [
-                          Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+                          Icon(Icons.warning_amber_rounded, color: Colors.white, size: 16),
                           SizedBox(width: 4),
-                          Text(
-                            'SOS',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
+                          Text('SOS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -967,46 +896,23 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
             ),
           ),
 
-          // ── 3. Recenter & Fast Forward Simulation Controls ────────────────
+          // ── 4. Recenter & Fast-Forward Simulation Demo Buttons ─────────────
           Positioned(
             right: 16,
-            top: MediaQuery.of(context).size.height * 0.32,
+            top: MediaQuery.of(context).size.height * 0.28,
             child: Column(
               children: [
                 FloatingActionButton.small(
                   heroTag: 'recenter_map',
                   backgroundColor: cardBg,
-                  onPressed: () {
-                    _mapController.move(_currentVehiclePosition, 14.5);
-                  },
+                  onPressed: () => _mapController.move(_currentVehiclePosition, 14.5),
                   child: const Icon(Icons.my_location_rounded, color: AppColors.primary),
                 ),
                 const SizedBox(height: 8),
                 FloatingActionButton.small(
-                  heroTag: 'zoom_in',
-                  backgroundColor: cardBg,
-                  onPressed: () {
-                    final currentZoom = _mapController.camera.zoom;
-                    _mapController.move(_mapController.camera.center, currentZoom + 1);
-                  },
-                  child: const Icon(Icons.add, color: Colors.grey),
-                ),
-                const SizedBox(height: 8),
-                FloatingActionButton.small(
-                  heroTag: 'zoom_out',
-                  backgroundColor: cardBg,
-                  onPressed: () {
-                    final currentZoom = _mapController.camera.zoom;
-                    _mapController.move(_mapController.camera.center, currentZoom - 1);
-                  },
-                  child: const Icon(Icons.remove, color: Colors.grey),
-                ),
-                const SizedBox(height: 8),
-                // Fast Step button for testing all states easily
-                FloatingActionButton.small(
-                  heroTag: 'skip_state',
+                  heroTag: 'skip_state_demo',
                   backgroundColor: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
-                  tooltip: 'Advance State (Demo)',
+                  tooltip: 'Fast forward demo state',
                   onPressed: () {
                     if (_currentState == RideTrackingState.driverDispatched) {
                       _advanceToState(RideTrackingState.arrivedAtPickup);
@@ -1022,22 +928,18 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
             ),
           ),
 
-          // ── 4. Bottom BottomSheet / Info Cards ──────────────────────────────
+          // ── 5. Bottom Ride Details & Safety PIN Sheet ───────────────────────
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
               decoration: BoxDecoration(
                 color: cardBg,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 20,
-                    offset: Offset(0, -4),
-                  ),
+                  BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, -4)),
                 ],
               ),
               child: SafeArea(
@@ -1045,20 +947,21 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Handle indicator
-                    Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(2),
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 14),
 
-                    // ── 4-Digit Boarding Safety PIN ─────────────────────────
+                    // 4-Digit Safety PIN Badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: isDark
@@ -1066,57 +969,43 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                               : [const Color(0xFFF1F5F9), const Color(0xFFE2E8F0)],
                         ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                        ),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(8),
+                            padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
                               color: AppColors.primary.withValues(alpha: 0.15),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(
-                              Icons.security_rounded,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
+                            child: const Icon(Icons.security_rounded, color: AppColors.primary, size: 18),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 10),
                           const Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Ride Safety PIN',
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
-                                ),
-                                Text(
-                                  'Share PIN with driver to start ride',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey),
-                                ),
+                                Text('Safety Verification PIN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                Text('Share PIN with driver to start ride', style: TextStyle(fontSize: 10, color: Colors.grey)),
                               ],
                             ),
                           ),
-                          // 4 Individual Digit Badges
                           Row(
-                            children: _safetyPin.split('').map((digit) {
+                            children: _safetyPin.split('').map((d) {
                               return Container(
                                 margin: const EdgeInsets.only(left: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary,
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  digit,
+                                  d,
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 16,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.w900,
-                                    letterSpacing: 1.0,
                                   ),
                                 ),
                               );
@@ -1125,74 +1014,65 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
 
-                    // ── Driver Details Row ──────────────────────────────────
+                    // Driver Row
                     Row(
                       children: [
                         CircleAvatar(
-                          radius: 28,
+                          radius: 26,
                           child: HubbleImage(
                             imagePath: widget.driverPhotoUrl,
-                            width: 56,
-                            height: 56,
-                            borderRadius: BorderRadius.circular(28),
+                            width: 52,
+                            height: 52,
+                            borderRadius: BorderRadius.circular(26),
                           ),
                         ),
-                        const SizedBox(width: 14),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                widget.driverName,
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 2),
+                              Text(widget.driverName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                               Text(
                                 '${widget.vehicleModel} · ${widget.licensePlate}',
                                 style: const TextStyle(color: Colors.grey, fontSize: 12),
                               ),
-                              const SizedBox(height: 4),
                               Row(
                                 children: [
-                                  const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                                  const Icon(Icons.star_rounded, color: Colors.amber, size: 15),
                                   const SizedBox(width: 2),
                                   Text(
                                     '${widget.driverRating} (${widget.totalRides} trips)',
-                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                   ),
                                 ],
                               ),
                             ],
                           ),
                         ),
-                        // Quick Action Buttons
                         Row(
                           children: [
                             IconButton.filledTonal(
                               onPressed: _openChatWithDriver,
-                              icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.primary),
+                              icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.primary, size: 20),
                               style: IconButton.styleFrom(
                                 backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             IconButton.filled(
                               onPressed: _callDriver,
-                              icon: const Icon(Icons.phone_rounded, color: Colors.white),
-                              style: IconButton.styleFrom(
-                                backgroundColor: AppColors.success,
-                              ),
+                              icon: const Icon(Icons.phone_rounded, color: Colors.white, size: 20),
+                              style: IconButton.styleFrom(backgroundColor: AppColors.success),
                             ),
                           ],
                         ),
                       ],
                     ),
+                    const Divider(height: 20),
 
-                    const Divider(height: 24),
-
-                    // ── Trip Stats & Addresses ──────────────────────────────
+                    // Trip Stats (ETA, Distance, Fare)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1212,67 +1092,22 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
                           icon: Icons.payments_outlined,
                           title: 'Fare',
                           value: 'K ${widget.fare.toStringAsFixed(0)}',
-                          color: AppColors.success,
+                          color: const Color(0xFF059669),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
 
-                    const SizedBox(height: 14),
-
-                    // Route Summary Bar
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.my_location_rounded, color: AppColors.success, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  widget.pickupName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              const Icon(Icons.location_on_rounded, color: Colors.redAccent, size: 16),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  widget.dropoffName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Share Trip Button
+                    // Share Live Tracking Button
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
                         onPressed: _shareTripStatus,
-                        icon: const Icon(Icons.share_rounded, size: 18),
-                        label: const Text('Share Live Ride Status', style: TextStyle(fontWeight: FontWeight.bold)),
+                        icon: const Icon(Icons.share_rounded, size: 16),
+                        label: const Text('Share Live Ride Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                       ),
                     ),
@@ -1300,17 +1135,14 @@ class _LiveRideTrackingScreenState extends ConsumerState<LiveRideTrackingScreen>
             color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: color, size: 18),
+          child: Icon(icon, color: color, size: 16),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
-            ),
+            Text(title, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
           ],
         ),
       ],

@@ -322,14 +322,24 @@ class AuthRepository implements BaseAuthRepository {
         try {
           googleUser = await _googleSignIn.authenticate();
         } on GoogleSignInException catch (e) {
+          debugPrint('>>> [GoogleSignIn] GoogleSignInException: code=${e.code}, description=${e.description}, details=${e.details}');
           if (e.code == GoogleSignInExceptionCode.canceled) {
             throw AppException('Google Sign-In was canceled.', code: 'canceled', originalError: e);
           }
-          if (e.description?.contains('No credentials available') == true || e.code == GoogleSignInExceptionCode.unknownError) {
-            throw AppException('No Google Account found on this device. Please add a Google Account in your device settings.', code: 'no-account', originalError: e);
+          if (e.description?.contains('No credentials available') == true) {
+            throw AppException(
+              'No Google Account credentials found. Please ensure your SHA-1 fingerprint is registered in Firebase Console.',
+              code: 'no-credentials',
+              originalError: e,
+            );
           }
-          throw AppException('Google Sign-In was canceled or re-authentication failed.', code: 'canceled', originalError: e);
-        } catch (e) {
+          throw AppException(
+            e.description ?? 'Google Sign-In failed (${e.code.name}).',
+            code: e.code.name,
+            originalError: e,
+          );
+        } catch (e, st) {
+          debugPrint('>>> [GoogleSignIn] Unexpected error during authenticate: $e\n$st');
           throw AppException.fromFirebaseException(e);
         }
 
@@ -337,7 +347,7 @@ class AuthRepository implements BaseAuthRepository {
           throw AppException('Google Sign-In was canceled.', code: 'canceled');
         }
 
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth = googleUser.authentication;
         final AuthCredential credential = GoogleAuthProvider.credential(
           idToken: googleAuth.idToken,
         );

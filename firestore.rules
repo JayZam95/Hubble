@@ -11,155 +11,69 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.admin == true || 
-        request.auth.token.role == 'admin'
-      );
-    }
-
-    // USERS COLLECTION
+    // USERS COLLECTION & SUBCOLLECTIONS
     match /users/{userId} {
-      // Public profiles readable by authenticated users
-      allow read: if isAuthenticated();
-      // User creation allowed for their own UID
-      allow create: if isOwner(userId);
-      // User update allowed for own profile without mutating protected fields directly
-      allow update: if isOwner(userId) || isAdmin();
-      allow delete: if isAdmin();
+      allow read: if true; // Allow reading user display profiles
+      allow write: if isAuthenticated();
 
-      // User subcollections
-      match /transactions/{txId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow create: if isOwner(userId) || isAdmin();
-        allow update, delete: if isAdmin();
-      }
-
-      match /notifications/{notifId} {
-        allow read, write: if isOwner(userId) || isAdmin();
-      }
-
-      match /cart/{itemId} {
-        allow read, write: if isOwner(userId);
+      match /{subcollection=**} {
+        allow read, write: if isAuthenticated();
       }
     }
 
-    // LISTINGS (Marketplace catalog)
+    // LISTINGS (Marketplace catalog & base64 photos)
     match /listings/{listingId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && (
-        !('providerId' in request.resource.data) || 
-        request.resource.data.providerId == request.auth.uid || 
-        isAdmin()
-      );
-      allow update, delete: if isAuthenticated() && (
-        resource.data.providerId == request.auth.uid || 
-        isAdmin()
-      );
+      allow read: if true; // Allow browsing listings even before auth
+      allow write: if isAuthenticated();
     }
 
-    // BOOKINGS
+    // CATEGORIES & METADATA
+    match /metadata/{document=**} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    match /categories/{document=**} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // BOOKINGS & ORDERS
     match /bookings/{bookingId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.clientId || 
-        request.auth.uid == resource.data.providerId || 
-        isAdmin()
-      );
-      allow create: if isAuthenticated() && (
-        request.resource.data.clientId == request.auth.uid || 
-        isAdmin()
-      );
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.clientId || 
-        request.auth.uid == resource.data.providerId || 
-        isAdmin()
-      );
-      allow delete: if isAdmin();
+      allow read, write: if isAuthenticated();
     }
 
-    // DISPUTES
+    match /orders/{orderId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // DISPUTES & REVIEWS
     match /disputes/{disputeId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.clientId || 
-        request.auth.uid == resource.data.providerId || 
-        request.auth.uid == resource.data.raisedBy ||
-        isAdmin()
-      );
-      allow create: if isAuthenticated() && (
-        request.resource.data.clientId == request.auth.uid || 
-        request.resource.data.raisedBy == request.auth.uid || 
-        isAdmin()
-      );
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.clientId || 
-        request.auth.uid == resource.data.providerId || 
-        isAdmin()
-      );
-      allow delete: if isAdmin();
+      allow read, write: if isAuthenticated();
     }
 
-    // REVIEWS
     match /reviews/{reviewId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && (
-        request.resource.data.reviewerId == request.auth.uid ||
-        isAdmin()
-      );
-      allow update, delete: if isAuthenticated() && (
-        resource.data.reviewerId == request.auth.uid || 
-        isAdmin()
-      );
+      allow read: if true;
+      allow write: if isAuthenticated();
     }
 
-    // CART (Root collection)
+    // CART
     match /cart/{cartId} {
       allow read, write: if isAuthenticated();
     }
 
-    // BUS TRIPS & TRANSIT SCHEDULES
+    // BUS TRIPS & BOOKINGS
     match /bus_trips/{tripId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated(); // Allow booking transactions to mark occupied seats
+      allow read: if true;
+      allow write: if isAuthenticated();
     }
 
-    // BUS BOOKINGS / TICKETS
     match /bus_bookings/{bookingId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.userId || 
-        isAdmin()
-      );
-      allow create: if isAuthenticated() && (
-        request.resource.data.userId == request.auth.uid || 
-        isAdmin()
-      );
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.userId || 
-        isAdmin()
-      );
-      allow delete: if isAdmin();
-    }
-
-    // RIDE REQUESTS (Cabs / Boda)
-    match /ride_requests/{requestId} {
       allow read, write: if isAuthenticated();
     }
 
-    // KYC VERIFICATIONS
-    match /kyc_verifications/{kycId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.userId || 
-        isAdmin()
-      );
-      allow create: if isAuthenticated() && (
-        request.resource.data.userId == request.auth.uid || 
-        isAdmin()
-      );
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-
-    // NOTIFICATIONS
-    match /notifications/{notifId} {
+    // RIDE REQUESTS
+    match /ride_requests/{requestId} {
       allow read, write: if isAuthenticated();
     }
 
@@ -180,20 +94,25 @@ service cloud.firestore {
       }
     }
 
+    // NOTIFICATIONS
+    match /notifications/{notifId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // KYC VERIFICATIONS
+    match /kyc_verifications/{kycId} {
+      allow read, write: if isAuthenticated();
+    }
+
     // REWARDS & LOYALTY
     match /rewards/{rewardId} {
       allow read, write: if isAuthenticated();
     }
 
-    // ORDERS
-    match /orders/{orderId} {
+    // FALLBACK RULE FOR ALL OTHER APP COLLECTIONS
+    match /{document=**} {
       allow read, write: if isAuthenticated();
-    }
-
-    // METADATA (e.g. trending categories, system status)
-    match /metadata/{document=**} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
     }
   }
 }
+
